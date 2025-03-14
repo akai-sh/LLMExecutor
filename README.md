@@ -1,6 +1,6 @@
 # LLMExeutor
 This repo provides the code for reproducing the experiments in LLMExeutor, which fine-tuning smaller LLMs with explanations as program executors.
-## prepare envirentments
+## prepare environments
 ```
 conda create -n llmexecutor python=3.9
 conda activate llmexecutor
