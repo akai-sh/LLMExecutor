@@ -9,7 +9,7 @@ pip install -r requirements.txt
 ```
 ## prepare data
 Please download the dataset from [here](https://drive.google.com/drive/folders/1mdfxpxl_PNjpo_cbHBQlQ7tQLmfJW55W?usp=drive_link) and place the `data` folder inside the `LLMExecutor` folder 
-## training Executor
+## Training Executor
 We fine-tuned three variants (SFT, SWA, RVBS) of LLMs, including: `meta-llama/CodeLlama-7b-Instruct-hf`, `meta-llama/CodeLlama-13b-Instruct-hf`, `Qwen/Qwen2.5-Coder-7B-Instruct`, `Qwen/Qwen2.5-Coder-14B-Instruct`
 ### SFT
 #### CodeLlama:
@@ -25,8 +25,6 @@ python train_codellama.py --output_dir ./../../fine_tuned_models/codellama_13b_s
 ```
 
 #### Qwen2.5-Coder:
-
-
 ```
 # process data
 python process_data_qwen.py --data_path ./../../data/train/Executor/sft.jsonl --save_path ./../../data/train/Executor/sft_formated_qwen.jsonl
@@ -39,7 +37,6 @@ python train.py     --model_name_or_path  Qwen/Qwen2.5-Coder-14B-Instruct    --d
 
 ### SWA
 for SWA, we only including `Qwen/Qwen2.5-Coder-14B-Instruct`
-
 ```
 python process_data_qwen.py --data_path ./../../data/train/Executor/swa.jsonl --save_path ./../../data/train/Executor/swa_formated_qwen.jsonl
 python binarize_data.py --input_path ./../../data/train/Executor/sft_formated_qwen.jsonl --output_path ./../../data/train/Executor/swa_processed_qwen.jsonl
@@ -63,10 +60,25 @@ python rm.py --model_name Qwen/Qwen2.5-Coder-7B-Instruct --output_path ./../../f
 python train_random_forest.py --data_path ./../../data/train/RVBS/rf_qwen.jsonl --model_path ./../../fine_tuned_models/random_forest_qwen.joblib
 ```
 ## ASE testing
-### SFT
-**Models:** `codellama_7b`, `codellama_13b`, `qwen_7b`, `qwen_14b`  
-**Datasets:** `codenetmut`, `humaneval`
+### Base Models
+```bash
+declare -A model_paths=([codellama_7b]="meta-llama/CodeLlama-7b-Instruct-hf" [codellama_13b]="meta-llama/CodeLlama-13b-Instruct-hf" [qwen_7b]="Qwen/Qwen2.5-Coder-7B-Instruct" [qwen_14b]="Qwen/Qwen2.5-Coder-14B-Instruct")
 
+for model in "${!model_paths[@]}"; do
+  for dataset in "codenetmut" "humaneval"; do
+    python run_executor.py --executor_model_path "${model_paths[$model]}" --results_path "./../../results/ASE/${model}_base_${dataset}.jsonl" --data_path "./../../data/test/ASE/${dataset}.jsonl" 
+    python calculate_ASE.py --results_path "./../../results/ASE/${model}_base_${dataset}.jsonl"
+  done
+done
+```
+### SWA
+```bash
+for dataset in "codenetmut" "humaneval"; do
+  python run_executor.py --executor_model_path "./../../fine_tuned_models/qwen_14b_swa/checkpoint_xx" --results_path "./../../results/ASE/qwen_14b_swa_${dataset}.jsonl" --data_path "./../../data/test/ASE/${dataset}.jsonl"
+  python calculate_ASE_SWA.py --results_path "./../../results/ASE/qwen_14b_swa_${dataset}.jsonl"
+done
+```
+### SFT
 ```bash
 for model in "codellama_7b" "codellama_13b" "qwen_7b" "qwen_14b"; do
   for dataset in "codenetmut" "humaneval"; do
@@ -75,61 +87,55 @@ for model in "codellama_7b" "codellama_13b" "qwen_7b" "qwen_14b"; do
   done
 done
 ```
-### SWA
-**Datasets:** `codenetmut`, `humaneval`
 
-```bash
-for dataset in "codenetmut" "humaneval"; do
-  python run_executor.py \
-    --executor_model_path "./../../fine_tuned_models/qwen_14b_swa/checkpoint_xx" \
-    --results_path "./../../results/ASE/qwen_14b_swa_${dataset}.jsonl" \
-    --data_path "./../../data/test/ASE/${dataset}.jsonl"
-
-  python calculate_ASE_SWA.py --results_path "./../../results/ASE/qwen_14b_swa_${dataset}.jsonl"
-done
-```
 ### RVBS
-**Model Mapping:**
-- codellama_* → codellama
-- qwen_* → qwen
-
 ```bash
-declare -A model_map=([codellama_7b]="codellama" ...)
+declare -A model_map=(  ["codellama_7b"]="codellama"  ["codellama_13b"]="codellama"  ["qwen_7b"]="qwen"  ["qwen_14b"]="qwen")
 
 for model in "codellama_7b" "codellama_13b" "qwen_7b" "qwen_14b"; do
   for dataset in "codenetmut" "humaneval"; do
-    python run_executor_RVBS.py \
-      --executor_model_path "./../../fine_tuned_models/${model}_sft/checkpoint_xx" \
-      --reward_model_path "./../../fine_tuned_models/rm_${model_map[$model]}_checkpoint_xx" \
-      --rf_model_path "./../../fine_tuned_models/random_forest_${model_map[$model]}.joblib" \
-      --results_path "./../../results/ASE/${model}_RVBS_${dataset}.jsonl" \
-      --data_path "./../../data/test/ASE/${dataset}.jsonl"
-      
+    python run_executor_RVBS.py --executor_model_path "./../../fine_tuned_models/${model}_sft/checkpoint_xx"   --reward_model_path "./../../fine_tuned_models/rm_${model_map[$model]}_checkpoint_xx"   --rf_model_path "./../../fine_tuned_models/random_forest_${model_map[$model]}.joblib"  --results_path "./../../results/ASE/${model}_RVBS_${dataset}.jsonl"   --data_path "./../../data/test/ASE/${dataset}.jsonl"
     python calculate_ASE.py --results_path "./../../results/ASE/${model}_RVBS_${dataset}.jsonl"
   done
 done
 ```
-### Base Models
-| Model          | Pretrained Path                          |
-|----------------|------------------------------------------|
-| codellama_7b   | meta-llama/CodeLlama-7b-Instruct-hf      |
-| codellama_13b  | meta-llama/CodeLlama-13b-Instruct-hf    |
-| qwen_7b        | Qwen/Qwen2.5-Coder-7B-Instruct          |
-| qwen_14b       | Qwen/Qwen2.5-Coder-14B-Instruct         |
 
+## Prefix-match and CRMs testing
+### Base Models
 ```bash
-declare -A model_paths=([codellama_7b]="..." [codellama_13b]="..." ...)
+declare -A model_paths=(  ["codellama_7b"]="meta-llama/CodeLlama-7b-Instruct-hf"  ["codellama_13b"]="meta-llama/CodeLlama-13b-Instruct-hf"  ["qwen_7b"]="Qwen/Qwen2.5-Coder-7B-Instruct"  ["qwen_14b"]="Qwen/Qwen2.5-Coder-14B-Instruct")
 
 for model in "${!model_paths[@]}"; do
   for dataset in "codenetmut" "humaneval"; do
-    python run_executor.py \
-      --executor_model_path "${model_paths[$model]}" \
-      --results_path "./../../results/ASE/${model}_base_${dataset}.jsonl" \
-      --data_path "./../../data/test/ASE/${dataset}.jsonl"
-      
-    python calculate_ASE.py --results_path "./../../results/ASE/${model}_base_${dataset}.jsonl"
+    python SIPA.py   --executor_model_path "${model_paths[$model]}"   --results_path "./../../results/PM_CRMs/${model}_base_${dataset}"   --data_path "./../../data/test/PM_CRMs/${dataset}.jsonl"   --variant sft
+    python calculate_CRMs.py  --result_path "./../../results/PM_CRMs/${model}_base_${dataset}/results.jsonl"
   done
 done
 ```
+### SFT and SWA
+```bash
+for variant in "sft" "swa"; do
+  for model in "codellama_7b" "codellama_13b" "qwen_7b" "qwen_14b"; do
+    for dataset in "codenetmut" "humaneval"; do
+      python SIPA.py   --executor_model_path "./../../fine_tuned_models/${model}_sft/checkpoint_xx"   --results_path "./../../results/PM_CRMs/${model}_${variant}_${dataset}"   --data_path "./../../data/test/PM_CRMs/${dataset}.jsonl"   --variant "${variant}"
+      python calculate_CRMs.py   --result_path "./../../results/PM_CRMs/${model}_${variant}_${dataset}/results.jsonl"
+    done
+  done
+done
+```
+### RVBS
+```bash
+declare -A model_map=(  ["codellama_7b"]="codellama"  ["codellama_13b"]="codellama"  ["qwen_7b"]="qwen"  ["qwen_14b"]="qwen")
 
-
+for model in "codellama_7b" "codellama_13b" "qwen_7b" "qwen_14b"; do
+  for dataset in "codenetmut" "humaneval"; do
+    python SIPA.py   --executor_model_path "./../../fine_tuned_models/${model}_sft/checkpoint_xx"   --reward_model_path "./../../fine_tuned_models/rm_${model_map[$model]}_checkpoint_xx"   --rf_model_path "./../../fine_tuned_models/random_forest_${model_map[$model]}.joblib"    --results_path "./../../results/PM_CRMs/${model}_RVBS_${dataset}"    --data_path "./../../data/test/PM_CRMs/${dataset}.jsonl"  --variant rvbs
+    python calculate_CRMs.py   result_path "./../../results/PM_CRMs/${model}_RVBS_${dataset}/results.jsonl"
+  done
+done
+```
+## Exception detection
+```
+cd test/Excep_dect
+python error_detc.py --executor_model_path ./../../fine_tuned_models/qwen_14b_excep/checkpoint_xx --excep_data ./../../data/test/Excep_dect/excep.jsonl --n_excep_data ./../../data/test/Excep_dect/n_excep.jsonl
+```
